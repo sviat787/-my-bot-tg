@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import sys
+import os
 from aiogram import Bot, Dispatcher, html
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
@@ -8,7 +9,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import Message
 
 # Ваш токен бота
-TOKEN = "9129792919:AAGLKpgrP4n0aXtF2DVDOnvAAsQZ1Vd2xSY"
+TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
 # Створюємо диспетчер
 dp = Dispatcher()
