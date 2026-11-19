@@ -185,7 +185,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-    async def send_offer_card(
+async def send_offer_card(
     target_message: types.Message,
     sender: types.User,
     nft_url: str,
