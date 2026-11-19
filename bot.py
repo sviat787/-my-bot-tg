@@ -124,7 +124,7 @@ def get_admin_keyboard() -> InlineKeyboardMarkup:
 
 try:
     await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
+except Exception:
         pass
 
 
