@@ -102,16 +102,17 @@ def get_admin_keyboard() -> InlineKeyboardMarkup:
         ]
     )
 
-    @dp.callback_query(F.data.startswith("offer_decline:"))
-    async def cb_offer_decline(callback: types.CallbackQuery):
-        offer_id = callback.data.split(":")[1]
-        offer = active_offers.get(offer_id)
 
-    stats["declined"] +=1
-await callback.answer("Предложение отклонено", show_alert=True)
-    
-if offer:
-        # Повідомляємо творця картки (тебе), що покупець відмовився
+@dp.callback_query(F.data.startswith("offer_decline:"))
+async def cb_offer_decline(callback: types.CallbackQuery):
+    offer_id = callback.data.split(":")[1]
+    offer = active_offers.get(offer_id)
+
+    stats["declined"] += 1
+    await callback.answer("Предложение отклонено", show_alert=True)
+
+    if offer:
+        # Повідомляємо творця картки, що покупець відмовився.
         try:
             await bot.send_message(
                 offer["creator_id"],
@@ -121,7 +122,7 @@ if offer:
         except Exception:
             pass
 
-try:
+    try:
         await callback.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
@@ -138,8 +139,8 @@ async def cb_offer_accept(callback: types.CallbackQuery):
     )
 
     if offer:
-        # Повідомляємо творця картки (тебе), що угоду прийнято
-try:
+        # Повідомляємо творця картки, що угоду прийнято.
+        try:
             admin_msg = (
                 f"✅ <b>Вашу пропозицію прийнято!</b>\n\n"
                 f"Покупець: <a href='tg://user?id={callback.from_user.id}'>{callback.from_user.first_name}</a> (@{callback.from_user.username or 'немає'})\n"
@@ -151,7 +152,7 @@ try:
         except Exception as e:
             print(f"Помилка відправки: {e}")
 
-try:
+    try:
         await callback.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
