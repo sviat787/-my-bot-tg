@@ -227,3 +227,17 @@ async def cb_admin_stats(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "admin_list")
 async def cb_admin_list(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user):
+        await callback.answer("Немає доступу", show_alert=True)
+        return
+
+    usernames = ", ".join(f"@{u}" for u in sorted(DEFAULT_ADMIN_USERNAMES)) or "немає"
+    extra_ids = ", ".join(str(i) for i in sorted(EXTRA_ADMIN_IDS)) or "немає"
+
+    text = (
+        "👑 <b>Список адміністраторів</b>\n\n"
+        f"• За username: <code>{html.escape(usernames)}</code>\n"
+        f"• Додаткові ID: <code>{html.escape(extra_ids)}</code>"
+    )
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_admin_keyboard())
+    await callback.answer()
