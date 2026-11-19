@@ -299,7 +299,7 @@ async def process_offer_message(message: types.Message, state: FSMContext):
     )
     @dp.callback_query(F.data.startswith("offer_decline:"))
     async def cb_offer_decline(callback: types.CallbackQuery):
-    offer_id = callback.data.split(":")[1]
+offer_id = callback.data.split(":")[1]
     offer = active_offers.get(offer_id)
     
     stats["declined"] += 1
