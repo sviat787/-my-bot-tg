@@ -107,9 +107,9 @@ def get_admin_keyboard() -> InlineKeyboardMarkup:
         offer_id = callback.data.split(":")[1]
         offer = active_offers.get(offer_id)
 
-    stats["declined"] += 1
+    stats["declined"] +=1
     await callback.answer("Предложение отклонено", show_alert=True)
-
+    
     if offer:
         # Повідомляємо творця картки (тебе), що покупець відмовився
         try:
