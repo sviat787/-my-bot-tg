@@ -2,6 +2,7 @@ import asyncio
 import html
 import os
 import re
+import uuid
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -29,6 +30,7 @@ NFT_URL_REGEX = re.compile(r"(https?://t\.me/nft/[A-Za-z0-9_]+-\d+)", re.IGNOREC
 AMOUNT_REGEX = re.compile(r"^\d+(?:[.,]\d+)?$")
 
 known_users: set[int] = set()
+active_offers: dict = {} # Тут зберігаються створені картки
 stats = {
     "offers_created": 0,
     "accepted": 0,
@@ -67,12 +69,6 @@ def normalize_currency(raw: str | None) -> str | None:
 def format_currency_label(currency: str) -> str:
     return "⭐️" if currency == "stars" else "GRAM"
 
-def get_offer_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="Отклонить", callback_data="offer_decline"),
-        InlineKeyboardButton(text="Принять", callback_data="offer_accept"),
-    ]])
-
 def get_admin_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -84,8 +80,112 @@ def get_admin_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="👑 Адміни", callback_data="admin_list"),
         ],
     ])
+    @dp.callback_query(F.data.startswith("offer_decline:"))
+async def cb_offer_decline(callback: types.CallbackQuery):
+    offer_id = callback.data.split(":")[1]
+    offer = active_offers.get(offer_id)
+    
+    stats["declined"] += 1
+    await callback.answer("Предложение отклонено", show_alert=True)
+    
+    if offer:
+        # Повідомляємо творця картки (тебе), що покупець відмовився
+        try:
+            await bot.send_message(
+                offer["creator_id"],
+                f"❌ Користувач <a href='tg://user?id={callback.from_user.id}'>{callback.from_user.first_name}</a> відхилив вашу пропозицію щодо {offer['amount']} {format_currency_label(offer['currency'])}.",
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
 
-async def send_offer_card(
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+
+@dp.callback_query(F.data.startswith("offer_accept:"))
+async def cb_offer_accept(callback: types.CallbackQuery):
+    offer_id = callback.data.split(":")[1]
+    offer = active_offers.get(offer_id)
+    
+    stats["accepted"] += 1
+    await callback.answer("Ви прийняли пропозицію! Продавець отримав сповіщення.", show_alert=True)
+    
+    if offer:
+        # Повідомляємо творця картки (тебе), що угоду прийнято
+        try:
+            admin_msg = (
+                f"✅ <b>Вашу пропозицію прийнято!</b>\n\n"
+                f"Покупець: <a href='tg://user?id={callback.from_user.id}'>{callback.from_user.first_name}</a> (@{callback.from_user.username or 'немає'})\n"
+                f"Сума: {offer['amount']} {format_currency_label(offer['currency'])}\n"
+                f"NFT: <a href='{offer['nft_url']}'>{format_nft_title(offer['nft_url'])}</a>\n\n"
+                f"Напишіть йому, щоб завершити обмін!"
+            )
+            await bot.send_message(offer["creator_id"], admin_msg, parse_mode="HTML")
+        except Exception as e:
+            print(f"Помилка відправки: {e}")
+
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+
+@dp.message(Command("admin"))
+async def cmd_admin(message: types.Message, state: FSMContext):
+    track_user(message.from_user)
+    await state.clear()
+    if not is_admin(message.from_user):
+        await message.answer("⛔ У вас немає доступу до адмін-панелі.")
+        return
+    await message.answer("🛠 <b>Адмін-панель</b>\nОбери дію:", parse_mode="HTML", reply_markup=get_admin_keyboard())
+
+@dp.callback_query(F.data == "admin_stats")
+async def cb_admin_stats(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user):
+        await callback.answer("Немає доступу", show_alert=True)
+        return
+    text = (
+        "📊 <b>Статистика бота</b>\n\n"
+        f"• Користувачів: <b>{len(known_users)}</b>\n"
+        f"• Карток створено: <b>{stats['offers_created']}</b>\n"
+        f"• Прийнято: <b>{stats['accepted']}</b>\n"
+        f"• Відхилено: <b>{stats['declined']}</b>"
+    )
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_admin_keyboard())
+    await callback.answer()
+
+@dp.callback_query(F.data == "admin_list")
+async def cb_admin_list(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user):
+        await callback.answer("Немає доступу", show_alert=True)
+        return
+    usernames = ", ".join(f"@{u}" for u in sorted(DEFAULT_ADMIN_USERNAMES)) or "немає"
+    extra_ids = ", ".join(str(i) for i in sorted(EXTRA_ADMIN_IDS)) or "немає"
+    text = (
+        "👑 <b>Список адміністраторів</b>\n\n"
+        f"• Username: <code>{html.escape(usernames)}</code>\n"
+        f"• ID: <code>{html.escape(extra_ids)}</code>"
+    )
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_admin_keyboard())
+    await callback.answer()
+
+async def healthcheck(request: web.Request) -> web.Response:
+    return web.Response(text="OK")
+
+async def main():
+    app = web.Application()
+    app.router.add_get("/", healthcheck)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", "10000"))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+    async def send_offer_card(
     target_message: types.Message,
     sender: types.User,
     nft_url: str,
@@ -96,6 +196,18 @@ async def send_offer_card(
     safe_url = html.escape(nft_url, quote=True)
     user_label = html.escape(sender.first_name or "Пользователь")
     cur_label = format_currency_label(currency)
+
+    # Генеруємо унікальний ID для картки
+    offer_id = str(uuid.uuid4())[:8]
+    
+    # Запам'ятовуємо, хто створив цю картку
+    active_offers[offer_id] = {
+        "creator_id": sender.id,
+        "creator_name": sender.first_name,
+        "nft_url": nft_url,
+        "amount": amount,
+        "currency": currency
+    }
 
     text = (
         f'Пользователь <a href="tg://user?id={sender.id}">{user_label}</a>\n'
@@ -112,13 +224,20 @@ async def send_offer_card(
 
     stats["offers_created"] += 1
 
+    # Прив'язуємо ID до кнопок
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Отклонить", callback_data=f"offer_decline:{offer_id}"),
+        InlineKeyboardButton(text="Принять", callback_data=f"offer_accept:{offer_id}"),
+    ]])
+
     await target_message.answer(
         text=text,
         parse_mode="HTML",
         link_preview_options=preview_options,
-        reply_markup=get_offer_keyboard(),
+        reply_markup=keyboard,
     )
-    @dp.message(Command("start"))
+
+@dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     track_user(message.from_user)
     await state.clear()
@@ -178,6 +297,56 @@ async def process_offer_message(message: types.Message, state: FSMContext):
         "Наприклад: <code>https://t.me/nft/FaithAmulet-84923 500 stars</code>",
         parse_mode="HTML"
     )
+    @dp.callback_query(F.data.startswith("offer_decline:"))
+async def cb_offer_decline(callback: types.CallbackQuery):
+    offer_id = callback.data.split(":")[1]
+    offer = active_offers.get(offer_id)
+    
+    stats["declined"] += 1
+    await callback.answer("Предложение отклонено", show_alert=True)
+    
+    if offer:
+        # Повідомляємо творця картки (тебе), що покупець відмовився
+        try:
+            await bot.send_message(
+                offer["creator_id"],
+                f"❌ Користувач <a href='tg://user?id={callback.from_user.id}'>{callback.from_user.first_name}</a> відхилив вашу пропозицію щодо {offer['amount']} {format_currency_label(offer['currency'])}.",
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
+
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+
+@dp.callback_query(F.data.startswith("offer_accept:"))
+async def cb_offer_accept(callback: types.CallbackQuery):
+    offer_id = callback.data.split(":")[1]
+    offer = active_offers.get(offer_id)
+    
+    stats["accepted"] += 1
+    await callback.answer("Ви прийняли пропозицію! Продавець отримав сповіщення.", show_alert=True)
+    
+    if offer:
+        # Повідомляємо творця картки (тебе), що угоду прийнято
+        try:
+            admin_msg = (
+                f"✅ <b>Вашу пропозицію прийнято!</b>\n\n"
+                f"Покупець: <a href='tg://user?id={callback.from_user.id}'>{callback.from_user.first_name}</a> (@{callback.from_user.username or 'немає'})\n"
+                f"Сума: {offer['amount']} {format_currency_label(offer['currency'])}\n"
+                f"NFT: <a href='{offer['nft_url']}'>{format_nft_title(offer['nft_url'])}</a>\n\n"
+                f"Напишіть йому, щоб завершити обмін!"
+            )
+            await bot.send_message(offer["creator_id"], admin_msg, parse_mode="HTML")
+        except Exception as e:
+            print(f"Помилка відправки: {e}")
+
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
 
 @dp.message(Command("admin"))
 async def cmd_admin(message: types.Message, state: FSMContext):
@@ -196,7 +365,7 @@ async def cb_admin_stats(callback: types.CallbackQuery):
     text = (
         "📊 <b>Статистика бота</b>\n\n"
         f"• Користувачів: <b>{len(known_users)}</b>\n"
-        f"• Карток: <b>{stats['offers_created']}</b>\n"
+        f"• Карток створено: <b>{stats['offers_created']}</b>\n"
         f"• Прийнято: <b>{stats['accepted']}</b>\n"
         f"• Відхилено: <b>{stats['declined']}</b>"
     )
@@ -217,23 +386,6 @@ async def cb_admin_list(callback: types.CallbackQuery):
     )
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_admin_keyboard())
     await callback.answer()
-    @dp.callback_query(F.data == "offer_decline")
-async def cb_offer_decline(callback: types.CallbackQuery):
-    stats["declined"] += 1
-    await callback.answer("Предложение отклонено", show_alert=True)
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
-
-@dp.callback_query(F.data == "offer_accept")
-async def cb_offer_accept(callback: types.CallbackQuery):
-    stats["accepted"] += 1
-    await callback.answer("Предложение принято!", show_alert=True)
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
 
 async def healthcheck(request: web.Request) -> web.Response:
     return web.Response(text="OK")
