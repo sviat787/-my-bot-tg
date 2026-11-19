@@ -192,7 +192,7 @@ async def send_offer_card(
     amount: str,
     currency: str,
 ):
-nft_title = html.escape(format_nft_title(nft_url))
+    nft_title = html.escape(format_nft_title(nft_url))
     safe_url = html.escape(nft_url, quote=True)
     user_label = html.escape(sender.first_name or "Пользователь")
     cur_label = format_currency_label(currency)
