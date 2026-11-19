@@ -1,4 +1,4 @@
-import asyncio
+.import asyncio
 import html
 import os
 import re
@@ -316,5 +316,11 @@ async def process_offer_message(message: types.Message, state: FSMContext):
         "⚠️ Я знайшов посилання, але не зрозумів суму чи валюту.\n"
         "Напиши в форматі: <code>посилання сума валюта</code>"
     )
-    if __name__=="__main__":
+
+
+async def main():
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
     asyncio.run(main())
