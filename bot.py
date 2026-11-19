@@ -297,7 +297,7 @@ async def process_offer_message(message: types.Message, state: FSMContext):
         "Наприклад: <code>https://t.me/nft/FaithAmulet-84923 500 stars</code>",
         parse_mode="HTML"
     )
-    @dp.callback_query(F.data.startswith("offer_decline:"))
+@dp.callback_query(F.data.startswith("offer_decline:"))
 async def cb_offer_decline(callback: types.CallbackQuery):
     offer_id = callback.data.split(":")[1]
     offer = active_offers.get(offer_id)
