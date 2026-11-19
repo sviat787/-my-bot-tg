@@ -1,4 +1,3 @@
-
 import asyncio
 import html
 import os
@@ -122,9 +121,9 @@ def get_admin_keyboard() -> InlineKeyboardMarkup:
         except Exception:
             pass
 
-try:
-    await callback.message.edit_reply_markup(reply_markup=None)
-except Exception:
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
         pass
 
 
@@ -474,4 +473,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
