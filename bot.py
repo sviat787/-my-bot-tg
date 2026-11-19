@@ -9,13 +9,10 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, LinkPreviewOptions
 from aiohttp import web
 
-# Токен береться зі змінної середовища BOT_TOKEN (додаєш у Render)
 TOKEN = os.getenv("BOT_TOKEN")
 
-# Адміни за username (у нижньому регістрі, без @)
 DEFAULT_ADMIN_USERNAMES = {"sviat787", "boorn777"}
 
-# Додаткові адміни за числовими ID через кому в Render: ADMIN_IDS=123456789,987654321
 EXTRA_ADMIN_IDS: set[int] = set()
 for raw_id in os.getenv("ADMIN_IDS", "").split(","):
     raw_id = raw_id.strip()
@@ -31,7 +28,6 @@ dp = Dispatcher()
 NFT_URL_REGEX = re.compile(r"(https?://t\.me/nft/[A-Za-z0-9_]+-\d+)", re.IGNORECASE)
 AMOUNT_REGEX = re.compile(r"^\d+(?:[.,]\d+)?$")
 
-# Зберігання статистики та користувачів у пам'яті (для Render без БД)
 known_users: set[int] = set()
 stats = {
     "offers_created": 0,
@@ -39,92 +35,55 @@ stats = {
     "declined": 0,
 }
 
-
 class OfferForm(StatesGroup):
-    waiting_for_amount = State()
-    waiting_for_currency = State()
-
+    waiting_for_data = State()
 
 class AdminBroadcast(StatesGroup):
     waiting_for_message = State()
 
-
 def is_admin(user: types.User | None) -> bool:
-    if not user:
-        return False
-    if user.id in EXTRA_ADMIN_IDS:
-        return True
-    if user.username and user.username.lower() in DEFAULT_ADMIN_USERNAMES:
-        return True
+    if not user: return False
+    if user.id in EXTRA_ADMIN_IDS: return True
+    if user.username and user.username.lower() in DEFAULT_ADMIN_USERNAMES: return True
     return False
 
-
 def track_user(user: types.User | None):
-    if user:
-        known_users.add(user.id)
-
+    if user: known_users.add(user.id)
 
 def format_nft_title(nft_url: str) -> str:
-    """Перетворює https://t.me/nft/FaithAmulet-84923 на FaithAmulet #84923."""
     slug = nft_url.rstrip("/").split("/")[-1]
     if "-" in slug:
         name, num = slug.rsplit("-", 1)
         return f"{name} #{num}"
     return slug
 
-
 def normalize_currency(raw: str | None) -> str | None:
-    """Повертає 'stars' або 'gram', якщо валюта підтримується."""
-    if not raw:
-        return None
+    if not raw: return None
     val = raw.strip().lower()
-    if val in {"stars", "star", "⭐️", "⭐", "🌟"}:
-        return "stars"
-    if val in {"gram", "grams", "грам", "грами", "грамів"}:
-        return "gram"
+    if val in {"stars", "star", "⭐️", "⭐", "🌟"}: return "stars"
+    if val in {"gram", "grams", "грам", "грами", "грамів"}: return "gram"
     return None
-
 
 def format_currency_label(currency: str) -> str:
     return "⭐️" if currency == "stars" else "GRAM"
 
-
 def get_offer_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="Отклонить", callback_data="offer_decline"),
-                InlineKeyboardButton(text="Принять", callback_data="offer_accept"),
-            ]
-        ]
-    )
-
-
-def get_currency_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="⭐️ Stars", callback_data="cur_stars"),
-                InlineKeyboardButton(text="GRAM", callback_data="cur_gram"),
-            ]
-        ]
-    )
-
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Отклонить", callback_data="offer_decline"),
+        InlineKeyboardButton(text="Принять", callback_data="offer_accept"),
+    ]])
 
 def get_admin_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats"),
-                InlineKeyboardButton(text="📢 Розсилка", callback_data="admin_broadcast"),
-            ],
-            [
-                InlineKeyboardButton(text="🎁 Створити картку", callback_data="admin_new_offer"),
-                InlineKeyboardButton(text="👑 Адміни", callback_data="admin_list"),
-            ],
-        ]
-    )
-
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats"),
+            InlineKeyboardButton(text="📢 Розсилка", callback_data="admin_broadcast"),
+        ],
+        [
+            InlineKeyboardButton(text="🎁 Створити картку", callback_data="admin_new_offer"),
+            InlineKeyboardButton(text="👑 Адміни", callback_data="admin_list"),
+        ],
+    ])
 
 async def send_offer_card(
     target_message: types.Message,
@@ -159,27 +118,20 @@ async def send_offer_card(
         link_preview_options=preview_options,
         reply_markup=get_offer_keyboard(),
     )
-
-
-# ---------- Команди користувача ----------
-@dp.message(Command("start"))
+    @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     track_user(message.from_user)
     await state.clear()
-
     text = (
-        "Привіт! Кидай одразу в одному повідомленні:\n"
+        "Привіт! Щоб створити оффер, просто надішли мені повідомлення у форматі:\n"
         "<code>посилання_на_nft сума валюта</code>\n\n"
         "Приклади:\n"
         "• <code>https://t.me/nft/FaithAmulet-84923 11000 stars</code>\n"
-        "• <code>https://t.me/nft/FaithAmulet-84923 250 gram</code>\n\n"
-        "Або просто скинь посилання на NFT — я запитаю суму й валюту."
+        "• <code>https://t.me/nft/FaithAmulet-84923 250 gram</code>"
     )
     if is_admin(message.from_user):
         text += "\n\n👑 Ви маєте права адміністратора. Використовуйте /admin"
-
     await message.answer(text, parse_mode="HTML")
-
 
 @dp.message(Command("offer"))
 async def cmd_offer(message: types.Message, state: FSMContext):
@@ -191,8 +143,42 @@ async def cmd_offer(message: types.Message, state: FSMContext):
         parse_mode="HTML",
     )
 
+@dp.message(F.text)
+async def process_offer_message(message: types.Message, state: FSMContext):
+    if message.text.startswith("/"):
+        return
 
-# ---------- Адмін-панель ----------
+    track_user(message.from_user)
+
+    nft_match = NFT_URL_REGEX.search(message.text)
+    if not nft_match:
+        return
+
+    nft_url = nft_match.group(1)
+    rest_text = message.text.replace(nft_url, "").strip()
+    parts = rest_text.split()
+
+    if len(parts) >= 2:
+        amount = parts[0]
+        currency = normalize_currency(parts[1])
+
+        if AMOUNT_REGEX.match(amount) and currency:
+            await send_offer_card(
+                target_message=message,
+                sender=message.from_user,
+                nft_url=nft_url,
+                amount=amount,
+                currency=currency
+            )
+            return
+
+    await message.answer(
+        "⚠️ Я знайшов посилання, але не зрозумів суму чи валюту.\n"
+        "Напиши в форматі: <code>посилання сума валюта</code>\n"
+        "Наприклад: <code>https://t.me/nft/FaithAmulet-84923 500 stars</code>",
+        parse_mode="HTML"
+    )
+
 @dp.message(Command("admin"))
 async def cmd_admin(message: types.Message, state: FSMContext):
     track_user(message.from_user)
@@ -200,66 +186,67 @@ async def cmd_admin(message: types.Message, state: FSMContext):
     if not is_admin(message.from_user):
         await message.answer("⛔ У вас немає доступу до адмін-панелі.")
         return
-
-    await message.answer(
-        "🛠 <b>Адмін-панель</b>\nОбери потрібну дію:",
-        parse_mode="HTML",
-        reply_markup=get_admin_keyboard(),
-    )
-
+    await message.answer("🛠 <b>Адмін-панель</b>\nОбери дію:", parse_mode="HTML", reply_markup=get_admin_keyboard())
 
 @dp.callback_query(F.data == "admin_stats")
 async def cb_admin_stats(callback: types.CallbackQuery):
     if not is_admin(callback.from_user):
         await callback.answer("Немає доступу", show_alert=True)
         return
-
     text = (
         "📊 <b>Статистика бота</b>\n\n"
-        f"• Користувачів у сесії: <b>{len(known_users)}</b>\n"
-        f"• Створено карток: <b>{stats['offers_created']}</b>\n"
-        f"• Натиснуто «Принять»: <b>{stats['accepted']}</b>\n"
-        f"• Натиснуто «Отклонить»: <b>{stats['declined']}</b>"
+        f"• Користувачів: <b>{len(known_users)}</b>\n"
+        f"• Карток: <b>{stats['offers_created']}</b>\n"
+        f"• Прийнято: <b>{stats['accepted']}</b>\n"
+        f"• Відхилено: <b>{stats['declined']}</b>"
     )
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_admin_keyboard())
     await callback.answer()
-
 
 @dp.callback_query(F.data == "admin_list")
 async def cb_admin_list(callback: types.CallbackQuery):
     if not is_admin(callback.from_user):
         await callback.answer("Немає доступу", show_alert=True)
         return
-
     usernames = ", ".join(f"@{u}" for u in sorted(DEFAULT_ADMIN_USERNAMES)) or "немає"
     extra_ids = ", ".join(str(i) for i in sorted(EXTRA_ADMIN_IDS)) or "немає"
-
     text = (
         "👑 <b>Список адміністраторів</b>\n\n"
-        f"• За username: <code>{html.escape(usernames)}</code>\n"
-        f"• Додаткові ID: <code>{html.escape(extra_ids)}</code>"
+        f"• Username: <code>{html.escape(usernames)}</code>\n"
+        f"• ID: <code>{html.escape(extra_ids)}</code>"
     )
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_admin_keyboard())
     await callback.answer()
-    AMOUNT_REGEX = re.compile(r"^\d+(?:[.,]\d+)?$")
+    @dp.callback_query(F.data == "offer_decline")
+async def cb_offer_decline(callback: types.CallbackQuery):
+    stats["declined"] += 1
+    await callback.answer("Предложение отклонено", show_alert=True)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
 
+@dp.callback_query(F.data == "offer_accept")
+async def cb_offer_accept(callback: types.CallbackQuery):
+    stats["accepted"] += 1
+    await callback.answer("Предложение принято!", show_alert=True)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
 
 async def healthcheck(request: web.Request) -> web.Response:
     return web.Response(text="OK")
 
-
 async def main():
     app = web.Application()
     app.router.add_get("/", healthcheck)
-
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.getenv("PORT", "10000"))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
