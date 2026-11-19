@@ -22,10 +22,14 @@ for raw_id in os.getenv("ADMIN_IDS", "").split(","):
     if raw_id.isdigit():
         EXTRA_ADMIN_IDS.add(int(raw_id))
 
+if not TOKEN:
+    raise RuntimeError("Не задано змінну середовища BOT_TOKEN")
+
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 NFT_URL_REGEX = re.compile(r"(https?://t\.me/nft/[A-Za-z0-9_]+-\d+)", re.IGNORECASE)
+AMOUNT_REGEX = re.compile(r"^\d+(?:[.,]\d+)?$")
 
 # Зберігання статистики та користувачів у пам'яті (для Render без БД)
 known_users: set[int] = set()
@@ -222,7 +226,4 @@ async def cb_admin_stats(callback: types.CallbackQuery):
 
 
 @dp.callback_query(F.data == "admin_list")
-async def cb_admin_list(callback: types.CallbackQuery):
-    if not is_admin(callback.from_user):
-        await callback.answer("Немає доступу", show_alert=True)
-        return
+async def cb_admin_list(callback: types.CallbackQuery)
