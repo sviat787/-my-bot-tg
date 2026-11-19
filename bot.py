@@ -121,7 +121,7 @@ if offer:
         except Exception:
             pass
 
-    try:
+try:
         await callback.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
@@ -139,7 +139,7 @@ async def cb_offer_accept(callback: types.CallbackQuery):
 
     if offer:
         # Повідомляємо творця картки (тебе), що угоду прийнято
-        try:
+try:
             admin_msg = (
                 f"✅ <b>Вашу пропозицію прийнято!</b>\n\n"
                 f"Покупець: <a href='tg://user?id={callback.from_user.id}'>{callback.from_user.first_name}</a> (@{callback.from_user.username or 'немає'})\n"
@@ -151,7 +151,7 @@ async def cb_offer_accept(callback: types.CallbackQuery):
         except Exception as e:
             print(f"Помилка відправки: {e}")
 
-    try:
+try:
         await callback.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
