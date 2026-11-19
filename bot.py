@@ -1,3 +1,4 @@
+
 import asyncio
 import html
 import os
@@ -30,27 +31,36 @@ NFT_URL_REGEX = re.compile(r"(https?://t\.me/nft/[A-Za-z0-9_]+-\d+)", re.IGNOREC
 AMOUNT_REGEX = re.compile(r"^\d+(?:[.,]\d+)?$")
 
 known_users: set[int] = set()
-active_offers: dict = {} # Тут зберігаються створені картки
+active_offers: dict = {}  # Тут зберігаються створені картки
 stats = {
     "offers_created": 0,
     "accepted": 0,
     "declined": 0,
 }
 
+
 class OfferForm(StatesGroup):
     waiting_for_data = State()
+
 
 class AdminBroadcast(StatesGroup):
     waiting_for_message = State()
 
+
 def is_admin(user: types.User | None) -> bool:
-    if not user: return False
-    if user.id in EXTRA_ADMIN_IDS: return True
-    if user.username and user.username.lower() in DEFAULT_ADMIN_USERNAMES: return True
+    if not user:
+        return False
+    if user.id in EXTRA_ADMIN_IDS:
+        return True
+    if user.username and user.username.lower() in DEFAULT_ADMIN_USERNAMES:
+        return True
     return False
 
+
 def track_user(user: types.User | None):
-    if user: known_users.add(user.id)
+    if user:
+        known_users.add(user.id)
+
 
 def format_nft_title(nft_url: str) -> str:
     slug = nft_url.rstrip("/").split("/")[-1]
@@ -59,42 +69,55 @@ def format_nft_title(nft_url: str) -> str:
         return f"{name} #{num}"
     return slug
 
+
 def normalize_currency(raw: str | None) -> str | None:
-    if not raw: return None
+    if not raw:
+        return None
     val = raw.strip().lower()
-    if val in {"stars", "star", "⭐️", "⭐", "🌟"}: return "stars"
-    if val in {"gram", "grams", "грам", "грами", "грамів"}: return "gram"
+    if val in {"stars", "star", "⭐️", "⭐", "🌟"}:
+        return "stars"
+    if val in {"gram", "grams", "грам", "грами", "грамів"}:
+        return "gram"
     return None
+
 
 def format_currency_label(currency: str) -> str:
     return "⭐️" if currency == "stars" else "GRAM"
 
+
 def get_admin_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats"),
-            InlineKeyboardButton(text="📢 Розсилка", callback_data="admin_broadcast"),
-        ],
-        [
-            InlineKeyboardButton(text="🎁 Створити картку", callback_data="admin_new_offer"),
-            InlineKeyboardButton(text="👑 Адміни", callback_data="admin_list"),
-        ],
-    ])
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats"),
+                InlineKeyboardButton(
+                    text="📢 Розсилка", callback_data="admin_broadcast"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🎁 Створити картку", callback_data="admin_new_offer"
+                ),
+                InlineKeyboardButton(text="👑 Адміни", callback_data="admin_list"),
+            ],
+        ]
+    )
+
     @dp.callback_query(F.data.startswith("offer_decline:"))
     async def cb_offer_decline(callback: types.CallbackQuery):
         offer_id = callback.data.split(":")[1]
         offer = active_offers.get(offer_id)
-    
+
     stats["declined"] += 1
     await callback.answer("Предложение отклонено", show_alert=True)
-    
+
     if offer:
         # Повідомляємо творця картки (тебе), що покупець відмовився
         try:
             await bot.send_message(
                 offer["creator_id"],
                 f"❌ Користувач <a href='tg://user?id={callback.from_user.id}'>{callback.from_user.first_name}</a> відхилив вашу пропозицію щодо {offer['amount']} {format_currency_label(offer['currency'])}.",
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
         except Exception:
             pass
@@ -104,14 +127,17 @@ def get_admin_keyboard() -> InlineKeyboardMarkup:
     except Exception:
         pass
 
+
 @dp.callback_query(F.data.startswith("offer_accept:"))
 async def cb_offer_accept(callback: types.CallbackQuery):
     offer_id = callback.data.split(":")[1]
     offer = active_offers.get(offer_id)
-    
+
     stats["accepted"] += 1
-    await callback.answer("Ви прийняли пропозицію! Продавець отримав сповіщення.", show_alert=True)
-    
+    await callback.answer(
+        "Ви прийняли пропозицію! Продавець отримав сповіщення.", show_alert=True
+    )
+
     if offer:
         # Повідомляємо творця картки (тебе), що угоду прийнято
         try:
@@ -131,6 +157,7 @@ async def cb_offer_accept(callback: types.CallbackQuery):
     except Exception:
         pass
 
+
 @dp.message(Command("admin"))
 async def cmd_admin(message: types.Message, state: FSMContext):
     track_user(message.from_user)
@@ -138,7 +165,12 @@ async def cmd_admin(message: types.Message, state: FSMContext):
     if not is_admin(message.from_user):
         await message.answer("⛔ У вас немає доступу до адмін-панелі.")
         return
-    await message.answer("🛠 <b>Адмін-панель</b>\nОбери дію:", parse_mode="HTML", reply_markup=get_admin_keyboard())
+    await message.answer(
+        "🛠 <b>Адмін-панель</b>\nОбери дію:",
+        parse_mode="HTML",
+        reply_markup=get_admin_keyboard(),
+    )
+
 
 @dp.callback_query(F.data == "admin_stats")
 async def cb_admin_stats(callback: types.CallbackQuery):
@@ -152,8 +184,11 @@ async def cb_admin_stats(callback: types.CallbackQuery):
         f"• Прийнято: <b>{stats['accepted']}</b>\n"
         f"• Відхилено: <b>{stats['declined']}</b>"
     )
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_admin_keyboard())
+    await callback.message.edit_text(
+        text, parse_mode="HTML", reply_markup=get_admin_keyboard()
+    )
     await callback.answer()
+
 
 @dp.callback_query(F.data == "admin_list")
 async def cb_admin_list(callback: types.CallbackQuery):
@@ -167,11 +202,15 @@ async def cb_admin_list(callback: types.CallbackQuery):
         f"• Username: <code>{html.escape(usernames)}</code>\n"
         f"• ID: <code>{html.escape(extra_ids)}</code>"
     )
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_admin_keyboard())
+    await callback.message.edit_text(
+        text, parse_mode="HTML", reply_markup=get_admin_keyboard()
+    )
     await callback.answer()
+
 
 async def healthcheck(request: web.Request) -> web.Response:
     return web.Response(text="OK")
+
 
 async def main():
     app = web.Application()
@@ -183,8 +222,11 @@ async def main():
     await site.start()
     await dp.start_polling(bot)
 
+
 if __name__ == "__main__":
     asyncio.run(main())
+
+
 async def send_offer_card(
     target_message: types.Message,
     sender: types.User,
@@ -199,14 +241,14 @@ async def send_offer_card(
 
     # Генеруємо унікальний ID для картки
     offer_id = str(uuid.uuid4())[:8]
-    
+
     # Запам'ятовуємо, хто створив цю картку
     active_offers[offer_id] = {
         "creator_id": sender.id,
         "creator_name": sender.first_name,
         "nft_url": nft_url,
         "amount": amount,
-        "currency": currency
+        "currency": currency,
     }
 
     text = (
@@ -225,10 +267,18 @@ async def send_offer_card(
     stats["offers_created"] += 1
 
     # Прив'язуємо ID до кнопок
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="Отклонить", callback_data=f"offer_decline:{offer_id}"),
-        InlineKeyboardButton(text="Принять", callback_data=f"offer_accept:{offer_id}"),
-    ]])
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Отклонить", callback_data=f"offer_decline:{offer_id}"
+                ),
+                InlineKeyboardButton(
+                    text="Принять", callback_data=f"offer_accept:{offer_id}"
+                ),
+            ]
+        ]
+    )
 
     await target_message.answer(
         text=text,
@@ -236,6 +286,7 @@ async def send_offer_card(
         link_preview_options=preview_options,
         reply_markup=keyboard,
     )
+
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
@@ -252,6 +303,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
         text += "\n\n👑 Ви маєте права адміністратора. Використовуйте /admin"
     await message.answer(text, parse_mode="HTML")
 
+
 @dp.message(Command("offer"))
 async def cmd_offer(message: types.Message, state: FSMContext):
     track_user(message.from_user)
@@ -261,6 +313,7 @@ async def cmd_offer(message: types.Message, state: FSMContext):
         "Наприклад: <code>https://t.me/nft/FaithAmulet-84923 11000 stars</code>",
         parse_mode="HTML",
     )
+
 
 @dp.message(F.text)
 async def process_offer_message(message: types.Message, state: FSMContext):
@@ -287,7 +340,7 @@ async def process_offer_message(message: types.Message, state: FSMContext):
                 sender=message.from_user,
                 nft_url=nft_url,
                 amount=amount,
-                currency=currency
+                currency=currency,
             )
             return
 
@@ -295,23 +348,25 @@ async def process_offer_message(message: types.Message, state: FSMContext):
         "⚠️ Я знайшов посилання, але не зрозумів суму чи валюту.\n"
         "Напиши в форматі: <code>посилання сума валюта</code>\n"
         "Наприклад: <code>https://t.me/nft/FaithAmulet-84923 500 stars</code>",
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
+
+
 @dp.callback_query(F.data.startswith("offer_decline:"))
 async def cb_offer_decline(callback: types.CallbackQuery):
     offer_id = callback.data.split(":")[1]
     offer = active_offers.get(offer_id)
-    
+
     stats["declined"] += 1
     await callback.answer("Предложение отклонено", show_alert=True)
-    
+
     if offer:
         # Повідомляємо творця картки (тебе), що покупець відмовився
         try:
             await bot.send_message(
                 offer["creator_id"],
                 f"❌ Користувач <a href='tg://user?id={callback.from_user.id}'>{callback.from_user.first_name}</a> відхилив вашу пропозицію щодо {offer['amount']} {format_currency_label(offer['currency'])}.",
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
         except Exception:
             pass
@@ -321,14 +376,17 @@ async def cb_offer_decline(callback: types.CallbackQuery):
     except Exception:
         pass
 
+
 @dp.callback_query(F.data.startswith("offer_accept:"))
 async def cb_offer_accept(callback: types.CallbackQuery):
     offer_id = callback.data.split(":")[1]
     offer = active_offers.get(offer_id)
-    
+
     stats["accepted"] += 1
-    await callback.answer("Ви прийняли пропозицію! Продавець отримав сповіщення.", show_alert=True)
-    
+    await callback.answer(
+        "Ви прийняли пропозицію! Продавець отримав сповіщення.", show_alert=True
+    )
+
     if offer:
         # Повідомляємо творця картки (тебе), що угоду прийнято
         try:
@@ -348,6 +406,7 @@ async def cb_offer_accept(callback: types.CallbackQuery):
     except Exception:
         pass
 
+
 @dp.message(Command("admin"))
 async def cmd_admin(message: types.Message, state: FSMContext):
     track_user(message.from_user)
@@ -355,7 +414,12 @@ async def cmd_admin(message: types.Message, state: FSMContext):
     if not is_admin(message.from_user):
         await message.answer("⛔ У вас немає доступу до адмін-панелі.")
         return
-    await message.answer("🛠 <b>Адмін-панель</b>\nОбери дію:", parse_mode="HTML", reply_markup=get_admin_keyboard())
+    await message.answer(
+        "🛠 <b>Адмін-панель</b>\nОбери дію:",
+        parse_mode="HTML",
+        reply_markup=get_admin_keyboard(),
+    )
+
 
 @dp.callback_query(F.data == "admin_stats")
 async def cb_admin_stats(callback: types.CallbackQuery):
@@ -369,8 +433,11 @@ async def cb_admin_stats(callback: types.CallbackQuery):
         f"• Прийнято: <b>{stats['accepted']}</b>\n"
         f"• Відхилено: <b>{stats['declined']}</b>"
     )
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_admin_keyboard())
+    await callback.message.edit_text(
+        text, parse_mode="HTML", reply_markup=get_admin_keyboard()
+    )
     await callback.answer()
+
 
 @dp.callback_query(F.data == "admin_list")
 async def cb_admin_list(callback: types.CallbackQuery):
@@ -384,11 +451,15 @@ async def cb_admin_list(callback: types.CallbackQuery):
         f"• Username: <code>{html.escape(usernames)}</code>\n"
         f"• ID: <code>{html.escape(extra_ids)}</code>"
     )
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_admin_keyboard())
+    await callback.message.edit_text(
+        text, parse_mode="HTML", reply_markup=get_admin_keyboard()
+    )
     await callback.answer()
+
 
 async def healthcheck(request: web.Request) -> web.Response:
     return web.Response(text="OK")
+
 
 async def main():
     app = web.Application()
@@ -400,5 +471,7 @@ async def main():
     await site.start()
     await dp.start_polling(bot)
 
+
 if __name__ == "__main__":
     asyncio.run(main())
+
