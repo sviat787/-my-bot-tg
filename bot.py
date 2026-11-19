@@ -226,4 +226,4 @@ async def cb_admin_stats(callback: types.CallbackQuery):
 
 
 @dp.callback_query(F.data == "admin_list")
-async def cb_admin_list(callback: types.CallbackQuery)
+async def cb_admin_list(callback: types.CallbackQuery):
