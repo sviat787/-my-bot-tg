@@ -241,3 +241,25 @@ async def cb_admin_list(callback: types.CallbackQuery):
     )
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_admin_keyboard())
     await callback.answer()
+    AMOUNT_REGEX = re.compile(r"^\d+(?:[.,]\d+)?$")
+
+
+async def healthcheck(request: web.Request) -> web.Response:
+    return web.Response(text="OK")
+
+
+async def main():
+    app = web.Application()
+    app.router.add_get("/", healthcheck)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", "10000"))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
